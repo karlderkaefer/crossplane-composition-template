@@ -1,0 +1,23 @@
+---
+repos:
+  - repo: local
+    hooks:
+      - id: kyverno-check
+        name: "Kyverno Check"
+        language: system
+        entry: task kyverno-check
+        pass_filenames: false
+  - repo: local
+    hooks:
+      - id: mutate-version
+        name: "Generate CRD Version"
+        language: system
+        entry: task generate-version
+        pass_filenames: false
+  - repo: local
+    hooks:
+      - id: snapshot
+        name: "Generate Snapshot"
+        language: system
+        entry: task snapshot
+        pass_filenames: false
