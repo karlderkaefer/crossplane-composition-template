@@ -13,6 +13,7 @@ tasks:
   # Configuration Package Management
   login:
     desc: Login to Upbound Marketplace
+    silent: true
     cmds:
       - echo "$UP_PASSWORD" | crossplane xpkg login -u $UP_USER -a $UP_ACCOUNT
   build:
@@ -24,10 +25,11 @@ tasks:
     deps:
       - build
       - login
-    silent: false
+    silent: true
     cmds: 
       - |
         crossplane xpkg push -f $PACKAGE_NAME.xpkg $UP_ACCOUNT/$PACKAGE_NAME:$DOCKER_TAG
+        echo "pushed $UP_ACCOUNT/$PACKAGE_NAME:$DOCKER_TAG"
   
   # Kind Cluster Management
   setup:
@@ -99,41 +101,38 @@ tasks:
         kubectl delete -f composition/examples/claim.yaml --wait=true || true
         kubectl delete -f composition/examples/providerconfig.yaml || true
         kubectl delete -f composition/examples/package.yaml || true
-  increment-patch:
-    desc: Increment the patch version in composition.yaml
+
+  # Release Management
+  generate-version:
+    desc: |
+      Generate the version of the configuration package as floating version labels
     silent: true
+    vars:
+      EXAMPLE: "composition/examples/package.yaml"
     cmds:
       - |
-        version=$(yq e '.metadata.labels."crossplane.io/xrd-version-patch"' {{ .COMPOSITION_PATH }})
+        version=$(yq e '.metadata.labels."crossplane.io/xrd-version-patch"' {{ .COMPOSITION_PATH }} | cut -c 2-)
+        semver_regex="^[0-9]+\.[0-9]+\.[0-9]+$"
+        if [[ ! $version =~ $semver_regex ]]; then
+          echo "Invalid semver version: $version for file {{ .COMPOSITION_PATH }}"
+          exit 1
+        fi
         major=$(echo $version | cut -d. -f1)
-        minor=$(echo $version | cut -d. -f2)
-        patch=$(echo $version | cut -d. -f3)
-        patch=$(awk -v patch=$patch 'BEGIN{print patch+1}')
-        new_version="$major.$minor.$patch"
-        yq eval '(.spec.package |= sub("'"$version"'", "'"$new_version"'"))' -i composition/examples/package.yaml
-        yq e -i '.metadata.labels."crossplane.io/xrd-version-patch" = "'$new_version'"' {{ .COMPOSITION_PATH }}
-        # yq eval 'select(.spec.compositionRevisionSelector.matchLabels."crossplane.io/xrd-version-patch") |= . * {"spec":{"compositionRevisionSelector":{"matchLabels":{"crossplane.io/xrd-version-patch":"'"$new_version"'"}}}}' -i composition/examples/claim.yaml
-        echo "Incremented patch version to $new_version"
-  increment-minor:
-    desc: Increment the patch version in composition.yaml
-    silent: true
-    cmds:
-      - |
-        version=$(yq e '.metadata.labels."crossplane.io/xrd-version-patch"' {{ .COMPOSITION_PATH }})
-        major=$(echo $version | cut -d. -f1)
-        minor=$(echo $version | cut -d. -f2)
-        patch=$(echo $version | cut -d. -f3)
-        minor=$(awk -v minor=$minor 'BEGIN{print minor+1}')
-        new_minor_version="$major.$minor"
-        new_patch_version="$major.$minor.$patch"
-        new_major_version="$major"
-        yq eval 'select(di == 0).spec.package = "'"$UP_DEFAULT_REPO/$UP_ACCOUNT/$PACKAGE_NAME:$new_patch_version"'"' -i composition/examples/package.yaml
-        yq e -i '.metadata.labels."crossplane.io/xrd-version-minor" = "'$new_minor_version'"' {{ .COMPOSITION_PATH }}
-        yq e -i '.metadata.labels."crossplane.io/xrd-version-patch" = "'$new_patch_version'"' {{ .COMPOSITION_PATH }}
-        echo "Incremented minor version to $new_minor_version"
+        minor=$(echo $version | cut -d. -f1-2)
+        echo "bumping file {{ .COMPOSITION_PATH }} to version $version and minor $minor and major $major"
+        yq eval -i -I 1 '.metadata.labels."crossplane.io/xrd-version-major" = "v'$major'"' {{ .COMPOSITION_PATH }}
+        yq eval -i -I 1 '.metadata.labels."crossplane.io/xrd-version-minor" = "v'$minor'"' {{ .COMPOSITION_PATH }}
+        new_package_value="$UP_DEFAULT_REPO/$UP_ACCOUNT/$PACKAGE_NAME:v$version"
+        echo "bumping file {{ .EXAMPLE }} to package $new_package_value"
+        yq eval '.spec.package = "'"$new_package_value"'"' -i composition/examples/package.yaml
+
   snapshot:
     desc: Snapshot the current state of the composition
     silent: true
     cmds:
       - crossplane beta render composition/examples/claim.yaml composition/apis/composition.yaml function.yaml > test/snapshots/main.yaml
-      - git --no-pager diff snapshots/main.yaml
+      - git --no-pager diff test/snapshots/main.yaml
+  kyverno-check:
+    silent: true
+    cmds:
+      - kyverno apply test/policies $(find composition -type f -name "definition.yaml" -exec sh -c 'find $(dirname {}) -name "*.yaml"' \; | awk '{print "--resource " $1}' | tr '\n' ' ') -v 3

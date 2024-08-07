@@ -1,0 +1,53 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-crossplane-labels
+  annotations:
+    policies.kyverno.io/title: Require Crossplane Labels
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/minversion: 1.6.0
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Composition, Label
+    policies.kyverno.io/description: >-
+      Define and use labels that identify semantic attributes of your Crossplane resources.
+      This policy validates that the label `crossplane.io/xrd-version` is specified with some value.
+spec:
+  validationFailureAction: audit
+  background: true
+  rules:
+  - name: check-for-patch-version-label
+    match:
+      any:
+      - resources:
+          kinds:
+          - Composition
+    validate:
+      message: "The label `crossplane.io/xrd-version-patch` is required."
+      pattern:
+        metadata:
+          labels:
+            crossplane.io/xrd-version-patch: "?*"
+  - name: check-for-minor-version-label
+    match:
+      any:
+      - resources:
+          kinds:
+          - Composition
+    validate:
+      message: "The label `crossplane.io/xrd-version-minor` is required."
+      pattern:
+        metadata:
+          labels:
+            crossplane.io/xrd-version-minor: "?*"
+  - name: check-for-major-version-label
+    match:
+      any:
+      - resources:
+          kinds:
+          - Composition
+    validate:
+      message: "The label `crossplane.io/xrd-version-major` is required."
+      pattern:
+        metadata:
+          labels:
+            crossplane.io/xrd-version-major: "?*"
