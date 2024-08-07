@@ -1,0 +1,139 @@
+version: 3
+dotenv:
+  - .env
+env:
+  PACKAGE_NAME: configuration-demo
+  CROSSPLANE_CHART_VERSION: v1.16.0-up.1
+  UP_DEFAULT_REPO: xpkg.upbound.io
+  DOCKER_TAG:
+    sh: yq e '.metadata.labels."crossplane.io/xrd-version-patch"' {{ .COMPOSITION_PATH }}
+vars:
+  COMPOSITION_PATH: composition/apis/composition.yaml
+tasks:
+  # Configuration Package Management
+  login:
+    desc: Login to Upbound Marketplace
+    cmds:
+      - echo "$UP_PASSWORD" | crossplane xpkg login -u $UP_USER -a $UP_ACCOUNT
+  build:
+    desc: Build the configuration image
+    cmds:
+      - |
+        crossplane xpkg build --package-root=composition --package-file=$PACKAGE_NAME.xpkg -e composition/examples
+  push:
+    deps:
+      - build
+      - login
+    silent: false
+    cmds: 
+      - |
+        crossplane xpkg push -f $PACKAGE_NAME.xpkg $UP_ACCOUNT/$PACKAGE_NAME:$DOCKER_TAG
+  
+  # Kind Cluster Management
+  setup:
+    desc: Setup local kind cluster
+    cmds:
+      - task: install-kind-latest
+      - task: create-cluster
+      - task: install-crossplane
+      - task: install-example
+  install-kind-latest:
+    cmds:
+      - |
+        LATEST_TAG=$(curl --silent "https://api.github.com/repos/kubernetes-sigs/kind/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+        curl -Lo ./kind https://kind.sigs.k8s.io/dl/${LATEST_TAG}/kind-$(uname -s)-amd64
+        chmod +x ./kind
+        sudo mv ./kind /usr/local/bin/kind
+    status:
+    - command -v kind
+  create-cluster:
+    cmds:
+      - kind create cluster --wait 1m
+    status:
+      - ! kind get kubeconfig
+  is-kind-env:
+    silent: true
+    cmds:
+      - |
+        context=$(kubectl config current-context)
+        if [[ "${context}" != "kind-kind" ]]; then
+          echo "This task requires a kind cluster to be running. But the current context is ${context}"
+          exit 1
+        fi
+  install-crossplane:
+    silent: true
+    deps:
+      - is-kind-env
+    cmds:
+      - |
+        printf "Installing the UXP Helm chart (this will take a few minutes)...\n"
+        helm repo add upbound-stable https://charts.upbound.io/stable
+        helm repo update upbound-stable
+        helm upgrade --install crossplane upbound-stable/universal-crossplane --devel --namespace crossplane-system --create-namespace --version $CROSSPLANE_CHART_VERSION --wait --set args[0]="--debug" --set args[1]="--enable-environment-configs"
+        kubectl -n crossplane-system wait deployment crossplane --for=condition=Available --timeout=180s
+    status:
+      - helm get values -n crossplane-system crossplane
+  install-secrets:
+    silent: true
+    deps:
+      - is-kind-env
+    cmds:
+      - |
+        kubectl delete secret upbound-pull-secret -n crossplane-system || true
+        kubectl create secret docker-registry upbound-pull-secret --docker-server=$UP_DEFAULT_REPO --docker-username=_token --docker-password=$UP_PASSWORD -n crossplane-system
+  install-example:
+    deps:
+      - is-kind-env
+    cmds:
+      - |
+        kubectl apply -f composition/examples/provider.yaml
+        kubectl wait provider.pkg crossplane-contrib-provider-kubernetes --for=condition=Healthy --timeout=40s
+        kubectl apply -f composition/examples/providerconfig.yaml
+        kubectl apply -f composition/examples/package.yaml
+        kubectl wait configuration.pkg configuration-demo --for=condition=Healthy --timeout=30s
+        kubectl apply -f composition/examples/claim.yaml
+  teardown:
+    desc: Teardown the configuration example
+    cmds:
+      - |
+        kubectl delete -f composition/examples/claim.yaml --wait=true || true
+        kubectl delete -f composition/examples/providerconfig.yaml || true
+        kubectl delete -f composition/examples/package.yaml || true
+  increment-patch:
+    desc: Increment the patch version in composition.yaml
+    silent: true
+    cmds:
+      - |
+        version=$(yq e '.metadata.labels."crossplane.io/xrd-version-patch"' {{ .COMPOSITION_PATH }})
+        major=$(echo $version | cut -d. -f1)
+        minor=$(echo $version | cut -d. -f2)
+        patch=$(echo $version | cut -d. -f3)
+        patch=$(awk -v patch=$patch 'BEGIN{print patch+1}')
+        new_version="$major.$minor.$patch"
+        yq eval '(.spec.package |= sub("'"$version"'", "'"$new_version"'"))' -i composition/examples/package.yaml
+        yq e -i '.metadata.labels."crossplane.io/xrd-version-patch" = "'$new_version'"' {{ .COMPOSITION_PATH }}
+        # yq eval 'select(.spec.compositionRevisionSelector.matchLabels."crossplane.io/xrd-version-patch") |= . * {"spec":{"compositionRevisionSelector":{"matchLabels":{"crossplane.io/xrd-version-patch":"'"$new_version"'"}}}}' -i composition/examples/claim.yaml
+        echo "Incremented patch version to $new_version"
+  increment-minor:
+    desc: Increment the patch version in composition.yaml
+    silent: true
+    cmds:
+      - |
+        version=$(yq e '.metadata.labels."crossplane.io/xrd-version-patch"' {{ .COMPOSITION_PATH }})
+        major=$(echo $version | cut -d. -f1)
+        minor=$(echo $version | cut -d. -f2)
+        patch=$(echo $version | cut -d. -f3)
+        minor=$(awk -v minor=$minor 'BEGIN{print minor+1}')
+        new_minor_version="$major.$minor"
+        new_patch_version="$major.$minor.$patch"
+        new_major_version="$major"
+        yq eval 'select(di == 0).spec.package = "'"$UP_DEFAULT_REPO/$UP_ACCOUNT/$PACKAGE_NAME:$new_patch_version"'"' -i composition/examples/package.yaml
+        yq e -i '.metadata.labels."crossplane.io/xrd-version-minor" = "'$new_minor_version'"' {{ .COMPOSITION_PATH }}
+        yq e -i '.metadata.labels."crossplane.io/xrd-version-patch" = "'$new_patch_version'"' {{ .COMPOSITION_PATH }}
+        echo "Incremented minor version to $new_minor_version"
+  snapshot:
+    desc: Snapshot the current state of the composition
+    silent: true
+    cmds:
+      - crossplane beta render composition/examples/claim.yaml composition/apis/composition.yaml function.yaml > test/snapshots/main.yaml
+      - git --no-pager diff snapshots/main.yaml

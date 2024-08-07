@@ -1,4 +1,4 @@
-# configuration-template
+# configuration-composition-template
 
 A template for writing a [Configuration].
 
@@ -37,3 +37,5 @@ Check out the Crossplane docs for more information on [creating] Configurations.
 [Configuration]: https://docs.crossplane.io/latest/concepts/packages
 [creating]: https://docs.crossplane.io/latest/concepts/packages/#create-a-configuration
 [xp-cli]: https://docs.crossplane.io/latest/cli/command-reference/
+
+

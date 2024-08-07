@@ -1,20 +1,10 @@
-apiVersion: kubernetes.crossplane.io/v1alpha1
-kind: ProviderConfig
-metadata:
-  name: default
-spec:
-  credentials:
-    source: InjectedIdentity
-
----
-
 # Make sure provider-kubernetes has enough permissions to install your objects into cluster
 apiVersion: pkg.crossplane.io/v1
 kind: Provider
 metadata:
   name: crossplane-contrib-provider-kubernetes
 spec:
-  package: xpkg.upbound.io/crossplane-contrib/provider-kubernetes:v0.12.1
+  package: xpkg.upbound.io/crossplane-contrib/provider-kubernetes:v0.14.1
   runtimeConfigRef:
     apiVersion: pkg.crossplane.io/v1beta1
     kind: DeploymentRuntimeConfig

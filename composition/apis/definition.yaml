@@ -8,8 +8,8 @@ spec:
     kind: XCfgResource
     plural: xcfgresources
   claimNames:
-    kind: CfgResource
-    plural: cfgresources
+    kind: CCfgResource
+    plural: ccfgresources
   connectionSecretKeys:
     - test
   versions:
