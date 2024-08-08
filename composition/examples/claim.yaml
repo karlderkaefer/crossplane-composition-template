@@ -5,6 +5,9 @@ metadata:
   name: simple-example
 spec:
   data: "I'm cool!"
+  compositionSelector:
+    matchLabels:
+      crossplane.io/xrd: xcfgresources.cfg.example.org
   compositionRevisionSelector:
     matchLabels:
       crossplane.io/xrd-version-major: v0
