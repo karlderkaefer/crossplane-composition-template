@@ -132,17 +132,43 @@ Let's assume we have following schema definiition
 5. Deprecate the old schema definition by setting `served: false` once all resource have been migration
 6. Remove old schemas after a certain period of time
 
-## Testing
+## Release Automation
 
-We have several checks and test in place to make sure the change was successful.
-These tests would run after a promotion step.
+We start the release process with a lot of manual steps. Over time we gonna automate the manual pieces.
+
+We have several checks and test in place to make sure the change was successful:
 
 - kyverno policy to validate security compliance
 - health status and readiness check of claim, composition, configuration and managed resources
 - resource connectivity test
-- (service uptime test)
+- service uptime test
 - snapshot update
 - expected composition revision
+
+We have a representative for every stage [dev|staging|prod] where we execute the tests.
+Note in these environments the `configuration package version` is not controlled by ArgoCD for the duration of the test, instead managed manually or by automation and change via kubectl over argocd cli.
+
+### Stage 1: Manual
+
+- ArgoCD sync is disabled for the duration of the test
+- We have local scripts to verify the release
+- scripts are executed by engineer using own kubernetes access
+- the promtion per staging is happing manually by providing PR to update version of configuration package
+- results of local test can be shared in the PR as comment
+
+### Stage 2: Semi-Automation
+
+- the tests are executed by CI pipeline
+- a change in version of representive clusters will trigger pipeline
+- test execution engine can be a kubernetes job that is triggered once
+- test results are posted in slack channel and pull request
+
+### Stage 3: Full Automation
+
+- we are using argo workflow to automate the release process
+- the stage promotion including required git commit is happening automatically
+- the argo workflow will automatically promote from dev to staging and from staging to prod
+- in case manual approval is required we will notified over slack
 
 ### Snapshot Testing
 
