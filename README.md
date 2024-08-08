@@ -134,6 +134,16 @@ Let's assume we have following schema definiition
 
 ## Testing
 
+We have several checks and test in place to make sure the change was successful.
+These tests would run after a promotion step.
+
+- kyverno policy to validate security compliance
+- health status and readiness check of claim, composition, configuration and managed resources
+- resource connectivity test
+- (service uptime test)
+- snapshot update
+- expected composition revision
+
 ### Snapshot Testing
 
 Kuttl Test are great to assert your expected towards the change.
