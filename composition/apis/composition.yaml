@@ -6,7 +6,7 @@ metadata:
     crossplane.io/xrd: xcfgresources.cfg.example.org
     crossplane.io/xrd-version-major: v0
     crossplane.io/xrd-version-minor: v0.0
-    crossplane.io/xrd-version-patch: v0.0.2
+    crossplane.io/xrd-version-patch: v0.0.3
 spec:
   compositeTypeRef:
     apiVersion: cfg.example.org/v1alpha1

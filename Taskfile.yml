@@ -25,6 +25,7 @@ tasks:
     deps:
       - build
       - login
+      - generate-version
     silent: true
     cmds: 
       - |
@@ -99,8 +100,8 @@ tasks:
     cmds:
       - |
         kubectl delete -f composition/examples/claim.yaml --wait=true || true
-        kubectl delete -f composition/examples/providerconfig.yaml || true
-        kubectl delete -f composition/examples/package.yaml || true
+        kubectl delete -f composition/examples/package.yaml --wait=true || true
+        kubectl delete -f composition/examples/providerconfig.yaml --wait=true || true
 
   # Release Management
   generate-version:
